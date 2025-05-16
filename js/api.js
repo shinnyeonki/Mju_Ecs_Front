@@ -146,9 +146,10 @@ async function removeContainer(containerId) {
  * @param {number} containerPort - 컨테이너 포트
  * @param {Object} env - 환경 변수 객체
  * @param {Array} cmd - 실행 명령어 배열
+ * @param {string} hostName - 호스트 이름
  * @returns {Promise<string>} - 생성된 컨테이너 ID를 포함한 응답 문자열
  */
-async function runContainer(imageName, containerPort, env = {}, cmd = []) {
+async function runContainer(imageName, containerPort, env = {}, cmd = [], hostName) {
     try {
         const response = await fetch('/docker/custom/run', {
             method: 'POST',
@@ -160,6 +161,7 @@ async function runContainer(imageName, containerPort, env = {}, cmd = []) {
                 containerPort,
                 env,
                 cmd,
+                hostName, // Add hostName to the request body
             }),
         });
 
@@ -175,9 +177,9 @@ async function runContainer(imageName, containerPort, env = {}, cmd = []) {
 }
 
 /**
- * 컨테이너 파일 다운로드 API
+ * 컨테이너 파일 다운로드 API (재시도 기능 포함)
  * @param {string} containerId - 컨테이너 ID
- * @returns {Promise<void>} - 다운로드 요청 Promise
+ * @returns {Promise<void>}
  */
 async function downloadContainerFiles(containerId) {
     const url = `${API_BASE_URL}/docker/download?containerId=${containerId}`;
@@ -189,14 +191,17 @@ async function downloadContainerFiles(containerId) {
         });
 
         if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+            if (response.status === 429) {
+                throw new Error('요청이 너무 많습니다. 서버가 힘들어요ㅠㅠ. 잠시 후 다시 시도해주세요.');
+            } else {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
         }
 
-        // Create a blob from the response
+        // Blob 다운로드 처리
         const blob = await response.blob();
         const downloadUrl = window.URL.createObjectURL(blob);
 
-        // Create a temporary link to trigger the download
         const a = document.createElement('a');
         a.href = downloadUrl;
         a.download = `${containerId}-volume.zip`;
@@ -204,10 +209,9 @@ async function downloadContainerFiles(containerId) {
         a.click();
         a.remove();
 
-        // Revoke the object URL after download
         window.URL.revokeObjectURL(downloadUrl);
     } catch (error) {
         console.error('파일 다운로드 오류:', error);
-        alert('파일 다운로드에 실패했습니다.');
+        alert('파일 다운로드에 실패했습니다.\n' + error.message);
     }
 }

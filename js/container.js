@@ -57,7 +57,7 @@ document.addEventListener('DOMContentLoaded', function() {
  */
 async function loadContainerDetails(containerId) {
     try {
-        const containerInfo = await getContainerInfo(containerId);
+        const containerInfo = (await getContainerInfo(containerId))?.[0];
         
         if (!containerInfo) {
             showMessage('containerMessage', '컨테이너 정보를 찾을 수 없습니다.');
@@ -81,22 +81,22 @@ async function loadContainerDetails(containerId) {
         }
 
         // 컨테이너 정보 표시
-        containerImageElement.textContent = containerInfo.image;
-        containerIdElement.textContent = containerInfo.containerId;
+        containerImageElement.textContent = containerInfo.image || '-';
+        containerIdElement.textContent = containerInfo.containerId || '-';
         containerStatusElement.textContent = containerInfo.status;
         containerStatusElement.className = `badge ${getStatusClass(containerInfo.status)}`;
         containerStartedElement.textContent = formatDate(containerInfo.startedAt);
         containerPortsElement.textContent = `${containerInfo.ports.containerPort} (컨테니어 내부 포트) ↔ ${containerInfo.ports.hostPort} (외부 접근 포트)`;
         
-        // 터미널 URL 설정
-        const terminalUrl = `http://localhost:${containerInfo.ports.hostPort}`;
+        // 웹 터미널 URL 설정 (ttydHostPort 사용)
+        const terminalUrl = `http://localhost:${containerInfo.ports.ttydHostPort}`;
         const terminalBtn = document.getElementById('openTerminal');
         if (terminalBtn) {
             terminalBtn.href = terminalUrl;
             terminalBtn.disabled = containerInfo.status.toLowerCase() !== 'running';
         }
         
-        // 컨테이너 URL 표시
+        // 컨테이너 터미널 URL 표시
         const urlElement = document.getElementById('containerUrl');
         if (urlElement) {
             urlElement.value = terminalUrl;
@@ -138,63 +138,6 @@ function getStatusClass(status) {
     }
 }
 
-/**
- * 컨테이너 문서 로드 함수
- * @param {string} imageName - 컨테이너 이미지 이름
- */
-async function loadContainerDocument(imageName) {
-    try {
-        // 이미지 이름으로 템플릿 찾기
-        const templateName = Object.keys(containerTemplates).find(key => 
-            containerTemplates[key].image === imageName || 
-            imageName.includes(containerTemplates[key].image.split(':')[0])
-        );
-        
-        const docCard = document.getElementById('documentCard');
-        
-        // 템플릿을 찾고 docPath가 있는 경우에만 문서 로드
-        if (templateName && containerTemplates[templateName].docPath) {
-            const docPath = containerTemplates[templateName].docPath;
-            
-            // 문서 파일 가져오기
-            const response = await fetch(docPath);
-            
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            
-            const markdown = await response.text();
-            
-            // 마크다운을 HTML로 변환하여 표시
-            const documentContent = document.getElementById('documentContent');
-            if (documentContent) {
-                documentContent.innerHTML = marked.parse(markdown);
-                
-                // 코드 블록에 스타일 적용
-                document.querySelectorAll('pre code').forEach((block) => {
-                    block.className = 'p-2 bg-light';
-                    block.style.display = 'block';
-                    block.style.overflow = 'auto';
-                });
-
-                // 마크다운 콘텐츠 내 이미지 크기 제한
-                document.querySelectorAll('#documentContent img').forEach((img) => {
-                    img.style.maxWidth = '100%';
-                    img.style.height = 'auto';
-                });
-                
-                // 문서 카드 표시
-                docCard.style.display = 'block';
-            }
-        } else {
-            // 문서가 없는 경우 카드 숨기기
-            docCard.style.display = 'none';
-        }
-    } catch (error) {
-        console.error('문서 로드 오류:', error);
-        document.getElementById('documentCard').style.display = 'none';
-    }
-}
 
 /**
  * 컨테이너 삭제 확인 함수
